@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
-set(PROJECT_NAME "sqlite3_flutter_libs")
+set(PROJECT_NAME "sqlcipher_flutter_libs")
 project(${PROJECT_NAME} LANGUAGES C CXX)
 
 # This value is used when generating builds using this plugin, so it must
 # not be changed
-set(PLUGIN_NAME "sqlite3_flutter_libs_plugin")
+set(PLUGIN_NAME "sqlcipher_flutter_libs_plugin")
 
 # Essentially, the idea of this build script is to compile a sqlite3.dll
 # and make Fluter bundle that with the final app.
@@ -22,40 +22,28 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 
-include(FetchContent)
-if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
-  # cmake 3.24.0 added the `DOWNLOAD_EXTRACT_TIMESTAMP` and prints an ugly warning when
-  # the default is used, so override it to the recommended behavior.
-  # We can't really ask users to use a cmake that recent, so there's this if here.
-  FetchContent_Declare(
-    sqlite3
-    URL https://sqlite.org/2025/sqlite-autoconf-3490100.tar.gz
-    DOWNLOAD_EXTRACT_TIMESTAMP NEW
-  )
-else()
-  FetchContent_Declare(
-    sqlite3
-    URL https://sqlite.org/2025/sqlite-autoconf-3490100.tar.gz
-  )
-endif()
-FetchContent_MakeAvailable(sqlite3)
+
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+find_package(OpenSSL REQUIRED)
+
+# Using a prebuilt sqlcipher amalgation because building it requires TCL/TK which no one has.
+# file(DOWNLOAD "https://fsn1.your-objectstorage.com/simon-public/assets/sqlcipher/v4_6_1.c" "${CMAKE_CURRENT_BINARY_DIR}/sqlcipher.c" EXPECTED_HASH SHA512=6c401bb020ceff69ea79dfde3f5ddf8802fb7dcd9da589b92de34a283a28f0802b98f28a87fbcb7b8bfa3bedb180dfd6d183eed567bbf12eea4f311e266f2e72)
 
 add_library(sqlite3 SHARED "sqlite3_flutter.c")
-
-target_include_directories(sqlite3 PRIVATE "${sqlite3_SOURCE_DIR}")
-target_compile_options(sqlite3 PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O2>" "/w")
+target_include_directories(sqlite3 PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_options(${PLUGIN_NAME} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O3>")
+# set_property(SOURCE "sqlite3_flutter.c" APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/sqlcipher.c")
+target_link_libraries(sqlite3 PRIVATE OpenSSL::Crypto)
 
 # Note: Keep in sync with https://github.com/simolus3/sqlite-native-libraries/blob/master/sqlite3-native-library/cpp/CMakeLists.txt
+# SQLITE_HAS_CODEC is required for sqlcipher
 target_compile_definitions(sqlite3 PRIVATE
-  SQLITE_ENABLE_DBSTAT_VTAB
-  SQLITE_ENABLE_FTS5
-  SQLITE_ENABLE_RTREE
-  SQLITE_ENABLE_MATH_FUNCTIONS
+  SQLITE_HAS_CODEC
   SQLITE_DQS=0
+  SQLITE_THREADSAFE=1
   SQLITE_DEFAULT_MEMSTATUS=0
   SQLITE_TEMP_STORE=2
   SQLITE_MAX_EXPR_DEPTH=0
-  SQLITE_STRICT_SUBTYPE=1
   SQLITE_OMIT_AUTHORIZATION
   SQLITE_OMIT_DECLTYPE
   SQLITE_OMIT_DEPRECATED
@@ -66,15 +54,17 @@ target_compile_definitions(sqlite3 PRIVATE
   SQLITE_USE_ALLOCA
   SQLITE_UNTESTABLE
   SQLITE_HAVE_ISNAN
-  SQLITE_HAVE_LOCALTIME_R
-  SQLITE_HAVE_LOCALTIME_S
+  SQLITE_ENABLE_DBSTAT_VTAB
+  SQLITE_ENABLE_FTS5
+  SQLITE_ENABLE_JSON1
+  SQLITE_ENABLE_RTREE
 )
 
 # Ensure sqlite3 actually gets build
 add_dependencies(${PLUGIN_NAME} sqlite3)
 
 # List of absolute paths to libraries that should be bundled with the plugin
-set(sqlite3_flutter_libs_bundled_libraries
+set(sqlcipher_flutter_libs_bundled_libraries
   "$<TARGET_FILE:sqlite3>"
   PARENT_SCOPE
 )
